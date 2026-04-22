@@ -43,8 +43,8 @@ export default function AppShell({
     <div className="min-h-screen flex">
       <aside className="w-64 sidebar-gradient text-slate-100 flex flex-col no-print">
         <div className="p-5 border-b border-white/10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white/15 flex items-center justify-center text-xl">
-            ⚕
+          <div className="w-10 h-10 rounded-lg bg-white/15 flex items-center justify-center">
+            <img src="/assets/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="font-bold text-white leading-tight">TTYT Liên Chiểu</div>

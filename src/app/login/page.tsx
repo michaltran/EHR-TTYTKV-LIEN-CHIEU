@@ -36,7 +36,11 @@ export default function LoginPage() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-3"
             style={{ background: 'linear-gradient(135deg, #1E73BE 0%, #134B82 100%)' }}>
-            <span className="text-white text-2xl">⚕</span>
+            <img 
+               src="/assets/images/logo.png" 
+               alt="TTYT Liên Chiểu Logo" 
+               className="w-full h-full object-contain" 
+            />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">TTYT khu vực Liên Chiểu</h1>
           <p className="text-slate-600 mt-1">Hệ thống quản lý hồ sơ sức khỏe định kỳ</p>

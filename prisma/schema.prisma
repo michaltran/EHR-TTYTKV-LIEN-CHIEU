@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS (phải nằm trước tất cả model) ============
+
+enum Role {
+  ADMIN
+  DOCTOR
+  CONCLUDER
+  DEPT_REP
+  EMPLOYEE
+  KTV_XETNGHIEM
+  KTV_CHANDOANHINHANH
+  VITAL_STAFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ExamRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum RecordStatus {
+  PENDING
+  IN_PROGRESS
+  WAITING_REVIEW
+  WAITING_CONCLUSION
+  COMPLETED
+}
+
+enum HealthClassification {
+  LOAI_I
+  LOAI_II
+  LOAI_III
+  LOAI_IV
+  LOAI_V
+}
+
+enum Specialty {
+  NOI_TUAN_HOAN
+  NOI_HO_HAP
+  NOI_TIEU_HOA
+  NOI_THAN_TIET_NIEU
+  NOI_TIET
+  CO_XUONG_KHOP
+  THAN_KINH
+  TAM_THAN
+  NGOAI_KHOA
+  DA_LIEU
+  SAN_PHU_KHOA
+  MAT
+  TAI_MUI_HONG
+  RANG_HAM_MAT
+}
+
+enum CaSignStatus {
+  PENDING      // Vừa tạo, đợi user xác nhận trên app VNPT SmartCA
+  COMPLETED    // Ký thành công
+  REJECTED     // User từ chối
+  EXPIRED      // Hết hạn
+  FAILED       // Lỗi kỹ thuật
+}
+
+enum CaSignTargetType {
+  CLINICAL_EXAM    // Ký 1 mục khám chuyên khoa
+  CONCLUSION       // Ký kết luận cuối
+}
+
+// ============ MODELS ============
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  fullName         String
+  role             Role      @default(EMPLOYEE)
+  specialties      String?
+  jobTitle         String?
+  signatureDataUrl String?
+  // VNPT SmartCA TH (SmartCA Tích hợp)
+  caUserId         String?   // Số CCCD/CMND
+  caSerialNumber   String?   // Serial chứng thư số
+  caEnabled        Boolean   @default(false)
+  caPasswordEnc    String?   // Mật khẩu SmartCA (đã mã hoá AES) - dùng cho v2/signatures/sign
+  caTotpSecretEnc  String?   // TOTP secret base32 (đã mã hoá AES) - dùng sinh OTP tự động
+  departmentId     String?
+  department       Department? @relation(fields: [departmentId], references: [id])
+  employeeId       String?   @unique
+  employee         Employee? @relation(fields: [employeeId], references: [id])
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  examsAsDoctor     ExamClinical[] @relation("DoctorExam")
+  conclusionsSigned HealthRecord[] @relation("Concluder")
+  auditLogs         AuditLog[]
+  signTransactions  CaSignTransaction[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String?  @unique
+  createdAt DateTime @default(now())
+
+  employees Employee[]
+  users     User[]
+}
+
+model Employee {
+  id               String     @id @default(cuid())
+  employeeCode     String?    @unique
+  fullName         String
+  gender           Gender
+  dateOfBirth      DateTime?
+  idNumber         String?
+  idIssuedDate     DateTime?
+  idIssuedPlace    String?
+  phone            String?
+  currentAddress   String?
+  occupation       String?
+  workplace        String?
+  startWorkingDate DateTime?
+  position         String?
+  employmentType   String?
+  qualification    String?
+  jobTitle         String?
+  photoUrl         String?
+  signatureUrl     String?   // URL ảnh chữ ký mẫu của NLĐ (dùng auto-fill khi tạo hồ sơ KSK)
+  familyHistory    String?
+  personalHistory  String?
+  previousJobs     String?
+  departmentId     String
+  department       Department @relation(fields: [departmentId], references: [id])
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  healthRecords HealthRecord[]
+  user          User?
+}
+
+model ExamRound {
+  id        String          @id @default(cuid())
+  name      String
+  year      Int
+  startDate DateTime
+  endDate   DateTime?
+  status    ExamRoundStatus @default(DRAFT)
+  createdAt DateTime        @default(now())
+
+  healthRecords HealthRecord[]
+}
+
+model HealthRecord {
+  id                        String                @id @default(cuid())
+  employeeId                String
+  employee                  Employee              @relation(fields: [employeeId], references: [id])
+  examRoundId               String
+  examRound                 ExamRound             @relation(fields: [examRoundId], references: [id])
+  status                    RecordStatus          @default(PENDING)
+
+  // Phần II. Thể lực
+  height                    Float?
+  weight                    Float?
+  bmi                       Float?
+  pulse                     Int?
+  bloodPressureSys          Int?
+  bloodPressureDia          Int?
+  physicalClassification    String?
+  // Ký thể lực (do VITAL_STAFF hoặc DOCTOR thực hiện)
+  vitalSignedAt             DateTime?
+  vitalSignatureDataUrl     String?
+  vitalStaffName            String?
+  vitalStaffTitle           String?
+
+  // Phần V. Kết luận
+  finalClassification       HealthClassification?
+  conclusionText            String?
+  concluderId               String?
+  concluder                 User?                 @relation("Concluder", fields: [concluderId], references: [id])
+  concluderSignedAt         DateTime?
+  concluderSignatureDataUrl String?
+  concluderNameSnapshot     String?
+  concluderTitleSnapshot    String?
+
+  // Tiền sử bệnh do bác sĩ khám ghi (phần I)
+  medicalHistoryNote        String?
+  obstetricHistory          String?
+
+  // Chữ ký người lao động xác nhận hồ sơ
+  employeeSignatureDataUrl  String?
+  employeeSignedAt          DateTime?
+
+  // Chữ ký người lập sổ KSK định kỳ
+  bookMakerSignatureDataUrl String?
+  bookMakerSignedAt         DateTime?
+  bookMakerName             String?
+  bookMakerTitle            String?
+
+  adminReviewNote           String?
+  reviewedAt                DateTime?
+  finalizedAt               DateTime?
+
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  clinicalExams ExamClinical[]
+  paraclinicals Paraclinical[]
+
+  @@unique([employeeId, examRoundId])
+}
+
+model ExamClinical {
+  id                  String       @id @default(cuid())
+  recordId            String
+  record              HealthRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  specialty           Specialty
+  findings            String?
+  classification      String?
+  extraData           String?
+  doctorId            String?
+  doctor              User?        @relation("DoctorExam", fields: [doctorId], references: [id])
+  signedAt            DateTime?
+  signatureDataUrl    String?
+  doctorNameSnapshot  String?
+  doctorTitleSnapshot String?
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([recordId, specialty])
+}
+
+model Paraclinical {
+  id         String       @id @default(cuid())
+  recordId   String
+  record     HealthRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  category   String
+  testName   String
+  result     String?
+  note       String?
+  evaluation String?
+  fileUrl    String?
+  fileName   String?
+  createdAt  DateTime     @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  target    String?
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+// Theo dõi giao dịch ký số qua VNPT SmartCA
+model CaSignTransaction {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  targetType     CaSignTargetType
+  targetId       String           // ID của ExamClinical hoặc HealthRecord
+  docId          String           // mã tài liệu gửi đến CA
+  tranCode       String?          // tran_code VNPT trả về
+  vnptTranId     String?          // transaction_id VNPT
+  status         CaSignStatus     @default(PENDING)
+  dataHash       String           // SHA256 hex của payload (chính là data_to_be_signed)
+  signatureValue String?          // chữ ký trả về từ CA (base64)
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+}

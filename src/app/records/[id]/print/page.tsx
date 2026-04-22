@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { notFound, redirect } from 'next/navigation';
 import { SPECIALTY_LABELS, CLASSIFICATION_LABELS, formatDate } from '@/lib/constants';
 import PrintButton from './print-button';
+import BackButton from '@/components/BackButton';
 
 // Parse extraData an toàn
 function parseExtra(json: string | null | undefined): any {

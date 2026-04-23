@@ -34,17 +34,16 @@ export function decrypt(ciphertext: string): string {
 }
 
 /**
- * Sinh TOTP 6 số từ secret base32 theo RFC 6238.
+ * Sinh TOTP 6 số từ secret theo RFC 6238.
  * Time step = 30s, SHA-1, 6 digits.
+ * Tự động nhận dạng format: base32 / base64 / hex.
  */
-export function generateTotp(secretBase32: string, timestamp?: number): string {
+export function generateTotp(secretInput: string, timestamp?: number): string {
   const now = timestamp ?? Math.floor(Date.now() / 1000);
   const counter = Math.floor(now / 30);
 
-  // Decode base32 secret
-  const secret = base32Decode(secretBase32.replace(/\s+/g, '').toUpperCase());
+  const secret = decodeSecretToBytes(secretInput);
 
-  // Counter as 8-byte big-endian
   const counterBuf = Buffer.alloc(8);
   counterBuf.writeBigUInt64BE(BigInt(counter), 0);
 
@@ -61,6 +60,42 @@ export function generateTotp(secretBase32: string, timestamp?: number): string {
 
   const otp = binary % 1_000_000;
   return otp.toString().padStart(6, '0');
+}
+
+/**
+ * Nhận dạng format TOTP secret và trả về Buffer bytes thực:
+ *  - base64 (chứa chữ thường / + / / hoặc kết thúc =) → decode base64,
+ *    nếu kết quả là chuỗi hex thì decode tiếp hex (VNPT cung cấp dạng này)
+ *  - hex thuần (chỉ 0-9A-Fa-f, độ dài chẵn) → decode hex
+ *  - mặc định → base32 (chuẩn Google Authenticator)
+ */
+function decodeSecretToBytes(secret: string): Buffer {
+  const trimmed = secret.replace(/\s+/g, '');
+
+  // base64: chứa chữ thường, +, / hoặc kết thúc = với ký tự ngoài base32
+  const hasBase64Chars = /[a-z+/]/.test(trimmed);
+  const hasPaddingWithNonBase32 = trimmed.endsWith('=') && /[018-9]/.test(trimmed);
+  if (hasBase64Chars || hasPaddingWithNonBase32) {
+    try {
+      const decoded = Buffer.from(trimmed, 'base64');
+      // VNPT hay cung cấp base64(hex_string) — kiểm tra nếu kết quả là hex ASCII
+      const asAscii = decoded.toString('ascii');
+      if (/^[0-9A-Fa-f]+$/.test(asAscii) && asAscii.length % 2 === 0) {
+        return Buffer.from(asAscii, 'hex');
+      }
+      return decoded;
+    } catch {
+      // fall through to base32
+    }
+  }
+
+  // hex thuần
+  if (/^[0-9A-Fa-f]+$/.test(trimmed) && trimmed.length % 2 === 0) {
+    return Buffer.from(trimmed, 'hex');
+  }
+
+  // base32 (Google Authenticator chuẩn)
+  return base32Decode(trimmed.toUpperCase());
 }
 
 function base32Decode(str: string): Buffer {

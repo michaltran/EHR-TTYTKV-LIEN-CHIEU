@@ -59,12 +59,18 @@ export async function getCertificate(userCccd: string, transactionId: string): P
     transaction_id: transactionId,
   });
   const certs: Certificate[] = res?.data?.user_certificates ?? [];
-  // Ưu tiên chứng thư SMARTCA còn hạn và đang hoạt động
+  // Giữ lại chứng thư chưa hết hạn; không filter theo cert_status text vì VNPT
+  // trả về code số (1/0) hoặc tiếng Anh (ACTIVE/REVOKED), không phải tiếng Việt.
   return certs.filter((c) => {
-    if (c.cert_status && !c.cert_status.includes('hoạt động')) return false;
+    if (c.cert_status !== undefined && c.cert_status !== null) {
+      const s = String(c.cert_status).toLowerCase();
+      // Chỉ loại bỏ nếu chắc chắn bị thu hồi / không hoạt động
+      if (s === '0' || s === 'revoked' || s === 'inactive' || s === 'suspended' ||
+          s.includes('thu hồi') || s.includes('tạm khóa')) return false;
+    }
     if (c.cert_valid_to) {
       const validTo = new Date(c.cert_valid_to);
-      if (validTo.getTime() < Date.now()) return false;
+      if (!isNaN(validTo.getTime()) && validTo.getTime() < Date.now()) return false;
     }
     return true;
   });
